@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+#
+# note-cli – einfaches Notiz-Tool
+#
+# Speichert Notizen unter .notes/db/<hash>, wobei <hash> der SHA1-Hash
+# des Inhalts ist (analog zu Git-Blobs).
+
+set -euo pipefail
+
+NOTES_DIR=".notes/db"
+
+usage() {
+    echo "Usage: note add <text>"
+    echo "       note list"
+    echo "       note delete <hash>"
+    exit 1
+}
+
+cmd_add() {
+    if [[ $# -eq 0 ]]; then
+        echo "Fehler: Kein Text angegeben." >&2
+        usage
+    fi
+
+    local content="$*"
+
+    mkdir -p "$NOTES_DIR"
+
+    # Hash über den Inhalt berechnen (SHA1, wie git hash-object)
+    local hash
+    hash=$(printf '%s' "$content" | sha1sum | awk '{print $1}')
+
+    local filepath="$NOTES_DIR/$hash"
+
+    if [[ -f "$filepath" ]]; then
+        echo "Notiz existiert bereits: $hash"
+        return 0
+    fi
+
+    printf '%s' "$content" > "$filepath"
+    echo "Notiz gespeichert: $hash"
+}
+
+cmd_list() {
+    if [[ ! -d "$NOTES_DIR" ]] || [[ -z "$(ls -A "$NOTES_DIR" 2>/dev/null)" ]]; then
+        echo "Keine Notizen vorhanden."
+        return 0
+    fi
+
+    local file
+    local hash
+    local content
+
+    for file in "$NOTES_DIR"/*; do
+        hash=$(basename "$file")
+        content=$(cat "$file")
+        echo "$hash  $content"
+    done
+}
+
+cmd_delete() {
+    if [[ $# -eq 0 ]]; then
+        echo "Fehler: Kein Hash angegeben." >&2
+        usage
+    fi
+
+    local hash="$1"
+    local filepath="$NOTES_DIR/$hash"
+
+    if [[ ! -f "$filepath" ]]; then
+        echo "Fehler: Keine Notiz mit Hash '$hash' gefunden." >&2
+        exit 1
+    fi
+
+    rm "$filepath"
+    echo "Notiz gelöscht: $hash"
+}
+
+main() {
+    if [[ $# -eq 0 ]]; then
+        usage
+    fi
+
+    local command="$1"
+    shift
+
+    case "$command" in
+        add)
+            cmd_add "$@"
+            ;;
+        list)
+            cmd_list "$@"
+            ;;
+        delete)
+            cmd_delete "$@"
+            ;;
+        *)
+            usage
+            ;;
+    esac
+}
+
+main "$@"
